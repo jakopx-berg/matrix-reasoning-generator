@@ -9,7 +9,7 @@ It generates 3x3 matrix reasoning puzzles of the kind used in cognitive screenin
 ## What this is
 
 - One static HTML file, no dependencies, no login, no data collection.
-- Seven puzzle types, each of which can be switched off, so you can drill one kind at a time.
+- Eight puzzle types, each of which can be switched off, so you can drill one kind at a time.
 - Two modes. Learning mode marks your answer and explains the rule behind it. Exam mode gives you 60 seconds per item, no feedback along the way, and a score at the end.
 - No item from any real test is reproduced. Everything is generated from rules written for this tool. Raven's Progressive Matrices and the commercial test batteries are copyrighted, and none of that material is here.
 
@@ -20,10 +20,11 @@ It generates 3x3 matrix reasoning puzzles of the kind used in cognitive screenin
 | Distribution | Three shapes, each appearing once per row and column |
 | Combination | The third cell overlays the first two |
 | Shape + inner | Outer shape distributed, inner shape growing across the row |
-| Quadrilateral + lines | The third figure combines the internal lines of the first two |
+| Quadrilateral + lines | The third figure combines the lines of the first two, by union, XOR, intersection or subtraction |
 | Arrows | The number of arrows and the direction they point |
 | Rotation | A pointer turning a fixed step each move |
-| Dots | Counts by distribution, progression, or addition |
+| Dots | Counts by distribution, progression, addition or subtraction |
+| Position | An element moving a fixed number of steps around the figure |
 
 Several types have single-rule variants as well as two-rule ones, so the difficulty moves around between items.
 
@@ -35,7 +36,9 @@ The fix was to hold the inner shape constant along each row so the comparison is
 
 The second round came from the items feeling repetitive. Two things caused it. Type selection was uniform random, which streaks and hands you the same kind four times running. And every type at that point drew one shape inside another, so they resembled each other whatever the underlying rule was. Selection now rotates through a shuffled bag, so no type repeats back to back and each comes up equally often. The types added later were drawn to look different from one another.
 
-Each generator is checked over several thousand runs before it ships: six unique options, exactly one correct, and the stated rule actually determining the answer.
+A third round went into the wrong answers rather than the puzzles. Random wrong options are easy to dismiss, because you can often see which ones belong to the family without solving anything. The options are now built deliberately: the result of stopping one step short or going one step too far, the correct figure with exactly one attribute changed, a straight copy of a neighbouring cell, and for the line puzzles the result of every other logical operator applied to the same two figures. That last one does the most work. If the rule is XOR, the union of the two figures is sitting right there among the options, looking reasonable.
+
+Each generator is checked over tens of thousands of runs before it ships: six unique options, exactly one correct, and the stated rule actually determining the answer in every cell of the grid.
 
 ## Running it locally
 

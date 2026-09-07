@@ -98,6 +98,7 @@
         <label class="opt"><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
         <label class="opt"><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
         <label class="opt"><input type="checkbox" class="ptype" value="dots" checked> Dots</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="position" checked> Position</label>
       </div>
     </div>
     <div class="row" style="margin-top:12px;">
@@ -159,6 +160,7 @@ function rand(a){ return a[Math.floor(Math.random()*a.length)]; }
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
 
 function cellKey(c){
+  if(c.pos) return 'P:'+c.pos.container+':'+c.pos.idx;
   if(c.dots!==undefined) return 'D:'+c.dots;
   if(c.rot) return 'R:'+c.rot.fig+':'+c.rot.angle;
   if(c.arrowLines) return 'A:'+c.arrowLines.join(',');
@@ -219,17 +221,41 @@ function genShapeInner(){
 /* Generator 4: Quadrilateral + internal lines — like the tutorial's parallelogram example.
    Each cell is the same leaning quad; the third figure overlays the lines of the first two. */
 var LINE_POOL=['d1','d2','mv','mh'];
+function setKey(a){ return a.slice().sort().join(','); }
+function uni(a,b){ var s={},o=[]; a.concat(b).forEach(function(x){ if(!s[x]){s[x]=1;o.push(x);} }); return o; }
+function inter(a,b){ return a.filter(function(x){ return b.indexOf(x)>=0; }); }
+function xorSet(a,b){ return a.filter(function(x){return b.indexOf(x)<0;}).concat(b.filter(function(x){return a.indexOf(x)<0;})); }
+function diffSet(a,b){ return a.filter(function(x){ return b.indexOf(x)<0; }); }
+function applyOp(op,a,b){ return op==='or'?uni(a,b) : op==='xor'?xorSet(a,b) : op==='and'?inter(a,b) : diffSet(a,b); }
+function randSubset(pool,minN,maxN){
+  var s=shuffle(pool.slice()), n=minN+Math.floor(Math.random()*(maxN-minN+1));
+  return s.slice(0,n);
+}
+var LINE_EXPL={
+  or:'In each row the third figure shows every line that appears in either of the first two.',
+  xor:'In each row, a line is kept only if it appears in one of the first two figures but not the other. Lines present in both cancel out and disappear.',
+  and:'In each row, only the lines that appear in both of the first two figures survive into the third.',
+  sub:'In each row, the lines of the second figure are removed from the first.'
+};
 function genQuadLines(){
+  var op=rand(['or','or','xor','and','sub']);
   var quads=shuffle(['square','plRight','plLeft','rhombus']).slice(0,3); // one quad type per row
   var grid=[];
   for(var r=0;r<3;r++){
-    var q=quads[r];
-    var two=shuffle(LINE_POOL).slice(0,2);  // two distinct single lines
-    var A=[two[0]], B=[two[1]], C=[two[0],two[1]];
+    var q=quads[r], A, B, C, guard=0, valid=false;
+    while(guard<300 && !valid){
+      guard++;
+      A=randSubset(LINE_POOL,1,3); B=randSubset(LINE_POOL,1,3);
+      C=applyOp(op,A,B);
+      valid = C.length>0 && setKey(A)!==setKey(B) &&
+              setKey(C)!==setKey(A) && setKey(C)!==setKey(B) &&
+              ((op!=='and' && op!=='sub') || inter(A,B).length>0);
+    }
+    if(!valid){ A=['d1','d2']; B=['d2','mv']; C=applyOp(op,A,B); }  // works for every op
     grid.push([{quad:q,lines:A},{quad:q,lines:B},{quad:q,lines:C}]);
   }
-  return {grid:grid, answer:grid[2][2], type:'Combination (lines)', isLine:true,
-    explanation:'Every cell is the same quadrilateral marked with internal lines. In each row the third figure combines (overlays) the lines from the first two figures, so the answer contains both the bottom-left line and the bottom-middle line.'};
+  return {grid:grid, answer:grid[2][2], type:'Lines ('+op.toUpperCase()+')', isLine:true, op:op,
+    explanation:'Every cell is the same quadrilateral marked with internal lines. '+LINE_EXPL[op]};
 }
 
 /* Generator 5: Arrows — number of arrows + their direction, in the style of the arrow-grid example. */
@@ -259,23 +285,18 @@ function mixArr(n){
   if(a.every(function(x){return x===a[0];})) a[0]=(a[0]==='right'?'left':'right');
   return a;
 }
-function makeArrowOptions(ans){
-  var n=ans.arrowLines.length, d=ans.arrowLines[0];
-  var opts=[{arrowLines:ans.arrowLines.slice()}], keys={};
-  keys[ans.arrowLines.join(',')]=true;
-  function add(lines){ var k=lines.join(','); if(!keys[k]){ keys[k]=true; opts.push({arrowLines:lines}); } }
-  var cand=[], dirsAll=['both','right','left','none'], i;
-  dirsAll.forEach(function(dd){ if(dd!==d){ var a=[]; for(i=0;i<n;i++)a.push(dd); cand.push(a); } });
-  [n-1,n+1,n+2].forEach(function(m){ if(m>=1&&m<=4){ var a=[]; for(i=0;i<m;i++)a.push(d); cand.push(a); } });
-  if(n>=2){ cand.push(mixArr(n)); cand.push(mixArr(n)); }
-  cand=shuffle(cand);
-  for(i=0;i<cand.length&&opts.length<6;i++) add(cand[i]);
-  var guard=0;
-  while(opts.length<6 && guard<300){ guard++; var m=1+Math.floor(Math.random()*3), a=[]; for(var j=0;j<m;j++)a.push(rand(dirsAll)); add(a); }
-  opts=shuffle(opts);
-  var ck=ans.arrowLines.join(','), idx=-1;
-  for(i=0;i<opts.length;i++){ if(opts[i].arrowLines.join(',')===ck){ idx=i; break; } }
-  return {opts:opts, correctIndex:idx};
+/* Systematic wrong answers: right count with the wrong direction, right direction with
+   the wrong count, and a mixed-direction set that never occurs in a real grid. */
+function arrowVariants(p){
+  var ans=p.answer, n=ans.arrowLines.length, d=ans.arrowLines[0], out=[], i;
+  ['both','right','left','none'].forEach(function(dd){
+    if(dd!==d){ var a=[]; for(i=0;i<n;i++)a.push(dd); out.push({arrowLines:a}); }
+  });
+  [n-1,n+1,n+2].forEach(function(m){
+    if(m>=1&&m<=4){ var a=[]; for(i=0;i<m;i++)a.push(d); out.push({arrowLines:a}); }
+  });
+  if(n>=2){ out.push({arrowLines:mixArr(n)}); out.push({arrowLines:mixArr(n)}); }
+  return out;
 }
 
 /* Generator 6: Rotation — a pointer turns a constant amount each step. */
@@ -287,22 +308,42 @@ function genRotation(){
   for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
     row.push({rot:{fig:fig, angle:(base+step*(r+c))%360}});
   } grid.push(row); }
-  return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true,
+  return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true, step:step,
     explanation:'The pointer turns by a constant amount clockwise with every step to the right and every step downward. Continue the rotation to fill the missing corner.'};
 }
-function makeAngleOptions(ans){
-  var fig=ans.rot.fig, a=ans.rot.angle;
-  var opts=[{rot:{fig:fig,angle:a}}], keys={}; keys[a]=true;
-  var pool=shuffle(ANGLES.slice()), i;
-  for(i=0;i<pool.length&&opts.length<6;i++){ if(!keys[pool[i]]){ keys[pool[i]]=true; opts.push({rot:{fig:fig,angle:pool[i]}}); } }
-  opts=shuffle(opts);
-  var idx=-1; for(i=0;i<opts.length;i++){ if(opts[i].rot.angle===a){ idx=i; break; } }
-  return {opts:opts, correctIndex:idx};
+
+/* Generator 8: Position — an element moves around the figure a fixed number of steps. */
+function posPoint(idx){
+  var ang=(-90+45*idx)*Math.PI/180, R=27;
+  return [50+R*Math.cos(ang), 50+R*Math.sin(ang)];
+}
+function genPosition(){
+  var two=Math.random()<0.45;
+  var containers=shuffle(['square','circle','diamond']).slice(0,3);
+  var base=Math.floor(Math.random()*8), step=rand([1,2,3]);
+  var grid=[];
+  for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
+    var cont = two ? containers[(r+c)%3] : containers[0];
+    row.push({pos:{container:cont, idx:(base+step*(r+c))%8}});
+  } grid.push(row); }
+  var expl = two
+    ? 'Two rules run at once. The dot advances a fixed number of positions clockwise with every step to the right and every step downward, and the container shape appears once in each row and column.'
+    : 'The dot advances a fixed number of positions clockwise around the figure with every step to the right and every step downward.';
+  return {grid:grid, answer:grid[2][2], type:'Position', isPos:true, step:step, two:two, explanation:expl};
+}
+/* Systematic wrong answers: stopping one step short, over-rotating by one step,
+   and the exact opposite. These are the mistakes you actually make under time. */
+function rotVariants(p){
+  var a=p.answer, fig=a.rot.fig, ang=a.rot.angle, st=p.step||45, out=[];
+  [-1,1,-2,2].forEach(function(m){ out.push({rot:{fig:fig, angle:((ang+m*st)%360+360)%360}}); });
+  out.push({rot:{fig:fig, angle:(ang+180)%360}});
+  ANGLES.forEach(function(g){ out.push({rot:{fig:fig, angle:g}}); });
+  return out;
 }
 
 /* Generator 7: Dots — the number of dots follows a rule. */
 function genDots(){
-  var mode=rand(['dist','prog','add']);
+  var mode=rand(['dist','prog','add','sub']);
   var grid=[], expl='', r,c,row;
   if(mode==='dist'){            // single rule: counts distributed
     var vals=shuffle([1,2,3,4,5,6]).slice(0,3);
@@ -312,38 +353,123 @@ function genDots(){
     var b=1+Math.floor(Math.random()*3);
     for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push({dots:b+r+c}); } grid.push(row); }
     expl='The number of dots increases by one with every step to the right and every step downward, so the missing cell continues the count.';
-  } else {                      // combination: third = first + second
+  } else if(mode==='add'){      // combination: third = first + second
     for(r=0;r<3;r++){ var a=1+Math.floor(Math.random()*3), bb=1+Math.floor(Math.random()*3);
       grid.push([{dots:a},{dots:bb},{dots:a+bb}]); }
     expl='In each row, the number of dots in the third cell equals the dots in the first two cells added together.';
+  } else {                      // combination: third = first minus second
+    for(r=0;r<3;r++){ var a2=3+Math.floor(Math.random()*4), b2=1+Math.floor(Math.random()*(a2-1));
+      grid.push([{dots:a2},{dots:b2},{dots:a2-b2}]); }
+    expl='In each row, the third cell shows the dots of the first cell minus the dots of the second.';
   }
-  return {grid:grid, answer:grid[2][2], type:'Dots', isDot:true, explanation:expl};
+  return {grid:grid, answer:grid[2][2], type:'Dots', isDot:true, mode:mode, explanation:expl};
 }
-function makeDotOptions(ans){
-  var n=ans.dots, opts=[{dots:n}], keys={}, i; keys[n]=true;
-  var cand=shuffle([n-2,n-1,n+1,n+2,n+3,n-3,n+4]).filter(function(x){return x>=1&&x<=9;});
-  for(i=0;i<cand.length&&opts.length<6;i++){ if(!keys[cand[i]]){ keys[cand[i]]=true; opts.push({dots:cand[i]}); } }
-  var x=1; while(opts.length<6 && x<=9){ if(!keys[x]){ keys[x]=true; opts.push({dots:x}); } x++; }
+/* Systematic wrong answers: off-by-one counts, and for the arithmetic modes the result
+   you get from applying the opposite operation. */
+function dotVariants(p){
+  var n=p.answer.dots, out=[], a=p.grid[2][0].dots, b=p.grid[2][1].dots;
+  if(p.mode==='add' && Math.abs(a-b)>=1) out.push({dots:Math.abs(a-b)});
+  if(p.mode==='sub') out.push({dots:a+b});
+  [n-1,n+1,n-2,n+2,n+3].forEach(function(v){ if(v>=1&&v<=9) out.push({dots:v}); });
+  return out;
+}
+
+/* Systematic wrong answers: the result of every OTHER logical operator applied to the
+   same two source figures, plus the answer with one line too many or too few. */
+function lineVariants(p){
+  var a=p.answer, q=a.quad, A=p.grid[2][0].lines, B=p.grid[2][1].lines, out=[];
+  ['or','xor','and','sub'].forEach(function(o){
+    if(o!==p.op) out.push({quad:q, lines:applyOp(o,A,B)});
+  });
+  out.push({quad:q, lines:diffSet(B,A)});
+  a.lines.forEach(function(l){ out.push({quad:q, lines:a.lines.filter(function(x){return x!==l;})}); });
+  LINE_POOL.forEach(function(l){ if(a.lines.indexOf(l)<0) out.push({quad:q, lines:a.lines.concat([l])}); });
+  return out;
+}
+
+/* Systematic wrong answers: the correct figure with exactly one attribute changed. */
+function layerVariants(p){
+  var a=p.answer, out=[];
+  SHAPES.forEach(function(s){ if(s!==a.layers[0].shape){ var c=cloneCell(a); c.layers[0].shape=s; out.push(c); } });
+  if(a.layers.length>1){
+    SHAPES.forEach(function(s){ if(s!==a.layers[1].shape){ var c=cloneCell(a); c.layers[1].shape=s; out.push(c); } });
+    var sw=cloneCell(a), t=sw.layers[0].shape; sw.layers[0].shape=sw.layers[1].shape; sw.layers[1].shape=t; out.push(sw);
+    var d=cloneCell(a); d.layers.pop(); out.push(d);
+    var z=cloneCell(a); z.layers[1].scale=Math.max(0.3, a.layers[1].scale-0.22); out.push(z);
+    var z2=cloneCell(a); z2.layers[1].scale=Math.min(0.9, a.layers[1].scale+0.22); out.push(z2);
+  } else {
+    var e=cloneCell(a); e.layers.push({shape:rand(SHAPES),scale:0.45,fill:false}); out.push(e);
+  }
+  return out;
+}
+
+/* Systematic wrong answers: one position short, one too far, and the opposite side. */
+function posVariants(p){
+  var a=p.answer, cont=a.pos.container, i=a.pos.idx, st=p.step, out=[];
+  [-1,1,-2,2].forEach(function(m){ out.push({pos:{container:cont, idx:((i+m*st)%8+8)%8}}); });
+  out.push({pos:{container:cont, idx:(i+4)%8}});
+  for(var k=0;k<8;k++) out.push({pos:{container:cont, idx:k}});
+  if(p.two){ ['square','circle','diamond'].forEach(function(cc){ if(cc!==cont) out.push({pos:{container:cc, idx:i}}); }); }
+  return out;
+}
+
+function cloneCell(c){ return JSON.parse(JSON.stringify(c)); }
+
+/* Repetition errors: a straight copy of a cell next to the gap. Always tempting,
+   because it looks like it belongs in the grid. */
+function neighbourCells(p){
+  return [p.grid[2][1], p.grid[1][2], p.grid[2][0], p.grid[1][1], p.grid[0][2]].map(cloneCell);
+}
+
+function assembleOptions(p, candidates, fallback){
+  var ans=p.answer, ak=cellKey(ans);
+  var opts=[cloneCell(ans)], keys={}; keys[ak]=true;
+  for(var i=0;i<candidates.length && opts.length<6;i++){
+    var c=candidates[i]; if(!c) continue;
+    var k=cellKey(c); if(!keys[k]){ keys[k]=true; opts.push(c); }
+  }
+  var guard=0;
+  while(opts.length<6 && guard<800){ guard++;
+    var m=fallback(); if(!m) continue;
+    var k2=cellKey(m); if(!keys[k2]){ keys[k2]=true; opts.push(m); }
+  }
   opts=shuffle(opts);
-  var idx=-1; for(i=0;i<opts.length;i++){ if(opts[i].dots===n){ idx=i; break; } }
+  var idx=-1; for(var j=0;j<opts.length;j++){ if(cellKey(opts[j])===ak){ idx=j; break; } }
   return {opts:opts, correctIndex:idx};
 }
 
-var GENS={distribution:genDistribution, overlay:genOverlay, shapeInner:genShapeInner, quadLines:genQuadLines, arrows:genArrows, rotation:genRotation, dots:genDots};
-
-function makeLineOptions(ansLines, quad){
-  var ansKey=ansLines.slice().sort().join(',');
-  var opts=[{quad:quad,lines:ansLines.slice()}];
-  var keys={}; keys[ansKey]=true; var guard=0;
-  while(opts.length<6 && guard<600){ guard++;
-    var subset=LINE_POOL.filter(function(){return Math.random()<0.45;});
-    var key=subset.slice().sort().join(',');
-    if(!keys[key]){ keys[key]=true; opts.push({quad:quad,lines:subset}); }
-  }
-  opts=shuffle(opts);
-  var idx=-1; for(var i=0;i<opts.length;i++){ if((opts[i].lines||[]).slice().sort().join(',')===ansKey){ idx=i; break; } }
-  return {opts:opts, correctIndex:idx};
+/* Two of the most tempting wrong answers first, then two repetition errors,
+   then the rest of the systematic pool in random order. */
+function mixCandidates(vars, nb){
+  return vars.slice(0,2).concat(nb.slice(0,2)).concat(shuffle(vars.slice(2).concat(nb.slice(2))));
 }
+
+function buildOptions(p){
+  var a=p.answer, nb=neighbourCells(p), cand, fb;
+  if(p.isLine){
+    cand=mixCandidates(lineVariants(p), nb);
+    fb=function(){ return {quad:a.quad, lines:LINE_POOL.filter(function(){return Math.random()<0.45;})}; };
+  } else if(p.isArrow){
+    cand=mixCandidates(arrowVariants(p), nb);
+    fb=function(){ var m=1+Math.floor(Math.random()*3), arr=[]; for(var j=0;j<m;j++)arr.push(rand(['both','right','left','none'])); return {arrowLines:arr}; };
+  } else if(p.isRot){
+    cand=mixCandidates(rotVariants(p), nb);
+    fb=function(){ return {rot:{fig:a.rot.fig, angle:rand(ANGLES)}}; };
+  } else if(p.isDot){
+    cand=mixCandidates(dotVariants(p), nb);
+    fb=function(){ return {dots:1+Math.floor(Math.random()*9)}; };
+  } else if(p.isPos){
+    cand=mixCandidates(posVariants(p), nb);
+    fb=function(){ return {pos:{container:a.pos.container, idx:Math.floor(Math.random()*8)}}; };
+  } else {
+    cand=mixCandidates(layerVariants(p), nb);
+    fb=function(){ return mutate(a); };
+  }
+  return assembleOptions(p, cand, fb);
+}
+
+var GENS={distribution:genDistribution, overlay:genOverlay, shapeInner:genShapeInner, quadLines:genQuadLines,
+          arrows:genArrows, rotation:genRotation, dots:genDots, position:genPosition};
 
 function mutate(cell){
   var c=JSON.parse(JSON.stringify(cell));
@@ -355,24 +481,6 @@ function mutate(cell){
   else if(k===2){ c.layers.push({shape:rand(SHAPES),scale:0.32,fill:false}); }
   else { c.layers[li].scale=Math.max(0.3,Math.min(1,c.layers[li].scale+(Math.random()<0.5?-0.22:0.22))); }
   return c;
-}
-
-function makeOptions(answer){
-  var opts=[JSON.parse(JSON.stringify(answer))];
-  var keys={}; keys[cellKey(answer)]=true;
-  var guard=0;
-  while(opts.length<6 && guard<400){ guard++;
-    var m=mutate(answer); var key=cellKey(m);
-    if(!keys[key]){ keys[key]=true; opts.push(m); }
-  }
-  while(opts.length<6){
-    var f={layers:[{shape:rand(SHAPES),scale:1.0,fill:false},{shape:rand(SHAPES),scale:0.45,fill:false}]};
-    var fk=cellKey(f); if(!keys[fk]){ keys[fk]=true; opts.push(f); }
-  }
-  var ckey=cellKey(answer);
-  opts=shuffle(opts);
-  var idx=-1; for(var i=0;i<opts.length;i++){ if(cellKey(opts[i])===ckey){ idx=i; break; } }
-  return {opts:opts, correctIndex:idx};
 }
 
 var _typeBag=[], _lastType=null;
@@ -387,11 +495,7 @@ function buildPuzzle(enabledTypes){
   }
   var t=_typeBag.pop(); _lastType=t;
   var p=GENS[t]();
-  var o=p.isLine ? makeLineOptions(p.answer.lines, p.answer.quad)
-        : p.isArrow ? makeArrowOptions(p.answer)
-        : p.isRot ? makeAngleOptions(p.answer)
-        : p.isDot ? makeDotOptions(p.answer)
-        : makeOptions(p.answer);
+  var o=buildOptions(p);
   p.opts=o.opts; p.correctIndex=o.correctIndex;
   return p;
 }
@@ -458,7 +562,17 @@ function drawRotation(cell){
   }
   return '<svg viewBox="0 0 100 100" width="78" height="78"><g transform="rotate('+ang+',50,50)">'+inner+'</g></svg>';
 }
+function drawPosition(cell){
+  var sw=2.2, cont=cell.pos.container, s='';
+  if(cont==='square') s='<rect x="12" y="12" width="76" height="76" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  else if(cont==='circle') s='<circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  else s='<polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  var pt=posPoint(cell.pos.idx);
+  s+='<circle cx="'+pt[0].toFixed(1)+'" cy="'+pt[1].toFixed(1)+'" r="6.5" fill="currentColor"/>';
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
+}
 function renderCell(cell){
+  if(cell.pos) return drawPosition(cell);
   if(cell.dots!==undefined) return drawDots(cell.dots);
   if(cell.rot) return drawRotation(cell);
   if(cell.arrowLines) return drawArrows(cell.arrowLines);
@@ -469,7 +583,7 @@ function renderCell(cell){
 
 /* ---------- app state & DOM (skip when no document) ---------- */
 function initApp(){
-  var state={ mode:'learn', enabled:['distribution','overlay','shapeInner','quadLines','arrows','rotation','dots'],
+  var state={ mode:'learn', enabled:['distribution','overlay','shapeInner','quadLines','arrows','rotation','dots','position'],
     examLen:10, learnTimer:false, qNum:0, correct:0, answered:false,
     puzzle:null, selected:-1, timer:null, timeLeft:60 };
 

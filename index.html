@@ -60,16 +60,21 @@
   .optcard.wrong{border-color:var(--bad);background:#fbeceb;}
   .optcard.locked{cursor:default;}
 
-  .feedback{margin-top:14px;font-size:14px;line-height:1.5;display:none;}
+  .feedback{margin-top:10px;font-size:14px;line-height:1.5;display:none;}
   .feedback.show{display:block;}
   .verdict{font-weight:700;}
   .verdict.good{color:var(--good);}
   .verdict.bad{color:var(--bad);}
-  .why{color:var(--ink);margin-top:4px;}
+  .why{color:var(--ink);}
   .tag{display:inline-block;font-size:11px;color:var(--muted);border:1px solid var(--line);
-    border-radius:20px;padding:2px 9px;margin-bottom:6px;}
+    border-radius:20px;padding:2px 9px;white-space:nowrap;}
 
-  .footer{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+  /* The button keeps a fixed spot: the verdict and type chip share its row, and the
+     explanation grows downward below it instead of pushing it off screen. */
+  .footer{display:flex;justify-content:space-between;align-items:center;
+    margin-top:16px;gap:12px;min-height:38px;}
+  .fbhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;}
+  .footer .btn{flex:0 0 auto;}
   .hint{font-size:12px;color:var(--muted);}
 
   .summary{text-align:center;padding:20px 10px;}
@@ -133,15 +138,17 @@
     <div class="divider"></div>
     <div class="opts" id="opts"></div>
 
-    <div class="feedback" id="feedback">
-      <span class="tag" id="fbTag"></span>
-      <div class="verdict" id="fbVerdict"></div>
-      <div class="why" id="fbWhy"></div>
+    <div class="footer">
+      <div class="fbhead">
+        <span class="hint" id="hint"></span>
+        <span class="tag" id="fbTag" style="display:none;"></span>
+        <span class="verdict" id="fbVerdict"></span>
+      </div>
+      <button class="btn primary" id="nextBtn" disabled>Next task</button>
     </div>
 
-    <div class="footer">
-      <span class="hint" id="hint"></span>
-      <button class="btn primary" id="nextBtn" disabled>Next task</button>
+    <div class="feedback" id="feedback">
+      <div class="why" id="fbWhy"></div>
     </div>
   </div>
 
@@ -267,7 +274,7 @@ function genArrows(){
   if(mode==='dirDist'){            // single rule: direction distributed, count fixed
     var cnt=rand([2,3,3]), dirs=shuffle(DIRS);
     for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(cnt,dirs[(r+c)%3])); } grid.push(row); }
-    expl='Every cell has the same number of arrows. The direction — pointing both ways, right, or left — appears once in every row and column, so the answer takes the direction missing from its row and column.';
+    expl='Every cell has the same number of arrows. The direction (pointing both ways, right, or left) appears once in every row and column, so the answer takes the direction missing from its row and column.';
   } else if(mode==='countProg'){   // single rule: count grows, direction fixed
     var dir=rand(DIRS);
     for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(c+1,dir)); } grid.push(row); }
@@ -642,6 +649,9 @@ function initApp(){
     state.answered=false; state.selected=-1;
     state.puzzle=buildPuzzle(state.enabled);
     feedback.classList.remove('show');
+    $('fbTag').style.display='none'; $('fbTag').textContent='';
+    $('fbVerdict').textContent=''; $('fbVerdict').className='verdict';
+    hint.style.display='';
     nextBtn.disabled=true;
     hint.textContent = state.mode==='exam'
       ? 'Exam mode: pick an answer, then Next (or wait for the timer). No going back.'
@@ -689,9 +699,11 @@ function initApp(){
     var ok = (i===ci);
     if(i>=0 && !ok) cards[i].classList.add('wrong');
     if(ok) state.correct++;
+    hint.style.display='none';                 // free the row for the verdict
     $('fbTag').textContent=state.puzzle.type;
+    $('fbTag').style.display='inline-block';
     var v=$('fbVerdict');
-    if(i<0){ v.textContent='Time up — no answer'; v.className='verdict bad'; }
+    if(i<0){ v.textContent='Time up, no answer'; v.className='verdict bad'; }
     else if(ok){ v.textContent='Correct'; v.className='verdict good'; }
     else { v.textContent='Not quite'; v.className='verdict bad'; }
     $('fbWhy').textContent=state.puzzle.explanation;

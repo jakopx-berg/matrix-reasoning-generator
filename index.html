@@ -186,10 +186,12 @@ function genDistribution(){
 
 /* Generator 2: Combination — third cell overlays the shapes of the first two */
 function genOverlay(){
-  var grid=[];
+  var grid=[], used={};
   for(var r=0;r<3;r++){
-    var pair=shuffle(SHAPES).slice(0,2);
-    var a=pair[0], b=pair[1];
+    var a,b,key,guard=0;
+    do{ var pair=shuffle(SHAPES).slice(0,2); a=pair[0]; b=pair[1]; key=a+'>'+b; guard++; }
+    while(used[key] && guard<50);
+    used[key]=true;
     grid.push([
       {layers:[{shape:a,scale:1.0,fill:false}]},
       {layers:[{shape:b,scale:0.5,fill:false}]},
@@ -347,11 +349,10 @@ function mutate(cell){
   var c=JSON.parse(JSON.stringify(cell));
   if(c.layers.length===0) c.layers.push({shape:rand(SHAPES),scale:0.5,fill:false});
   var li=Math.floor(Math.random()*c.layers.length);
-  var k=Math.floor(Math.random()*5);
+  var k=Math.floor(Math.random()*4);
   if(k===0){ var ns; do{ns=rand(SHAPES);}while(ns===c.layers[li].shape); c.layers[li].shape=ns; }
-  else if(k===1){ c.layers[li].fill=!c.layers[li].fill; }
-  else if(k===2 && c.layers.length>1){ c.layers.pop(); }
-  else if(k===3){ c.layers.push({shape:rand(SHAPES),scale:0.32,fill:false}); }
+  else if(k===1 && c.layers.length>1){ c.layers.pop(); }
+  else if(k===2){ c.layers.push({shape:rand(SHAPES),scale:0.32,fill:false}); }
   else { c.layers[li].scale=Math.max(0.3,Math.min(1,c.layers[li].scale+(Math.random()<0.5?-0.22:0.22))); }
   return c;
 }

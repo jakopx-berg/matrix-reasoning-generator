@@ -96,14 +96,14 @@
         </span>
       </div>
       <div class="group"><b>Puzzle types</b>
-        <label class="opt"><input type="checkbox" class="ptype" value="distribution" checked> Distribution</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="overlay" checked> Combination</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="shapeInner" checked> Shape + inner</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="quadLines" checked> Quadrilateral + lines</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="dots" checked> Dots</label>
-        <label class="opt"><input type="checkbox" class="ptype" value="position" checked> Position</label>
+        <label class="opt" title="Three shapes, each appearing once per row and column. Sometimes with a second nested shape as a separate rule."><input type="checkbox" class="ptype" value="distribution" checked> Distribution</label>
+        <label class="opt" title="The third cell overlays the shapes of the first two."><input type="checkbox" class="ptype" value="overlay" checked> Combination</label>
+        <label class="opt" title="Outer shape distributed, inner shape growing across each row."><input type="checkbox" class="ptype" value="shapeInner" checked> Shape + inner</label>
+        <label class="opt" title="Internal lines combined by union (OR), exclusive-or (XOR), intersection (AND) or subtraction."><input type="checkbox" class="ptype" value="quadLines" checked> Lines (logic)</label>
+        <label class="opt" title="The number of arrows, the direction they point, or both at once."><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
+        <label class="opt" title="A pointer turning a fixed step each move, clockwise or anticlockwise."><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
+        <label class="opt" title="Counts by distribution, progression, addition or subtraction."><input type="checkbox" class="ptype" value="dots" checked> Dots</label>
+        <label class="opt" title="An element moving a fixed number of steps around the figure, clockwise or anticlockwise."><input type="checkbox" class="ptype" value="position" checked> Position</label>
       </div>
     </div>
     <div class="row" style="margin-top:12px;">
@@ -310,13 +310,14 @@ function arrowVariants(p){
 var ANGLES=[0,45,90,135,180,225,270,315];
 function genRotation(){
   var fig=rand(['hand','arrow']);
-  var base=rand(ANGLES), step=rand([45,90]);
+  var base=rand(ANGLES), step=rand([45,90])*rand([1,-1]);   // turns either way
   var grid=[];
   for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
-    row.push({rot:{fig:fig, angle:(base+step*(r+c))%360}});
+    row.push({rot:{fig:fig, angle:((base+step*(r+c))%360+360)%360}});
   } grid.push(row); }
+  var way = step>0 ? 'clockwise' : 'anticlockwise';
   return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true, step:step,
-    explanation:'The pointer turns by a constant amount clockwise with every step to the right and every step downward. Continue the rotation to fill the missing corner.'};
+    explanation:'The pointer turns by a constant amount '+way+' with every step to the right and every step downward. Continue the rotation to fill the missing corner.'};
 }
 
 /* Generator 8: Position — an element moves around the figure a fixed number of steps. */
@@ -327,15 +328,16 @@ function posPoint(idx){
 function genPosition(){
   var two=Math.random()<0.45;
   var containers=shuffle(['square','circle','diamond']).slice(0,3);
-  var base=Math.floor(Math.random()*8), step=rand([1,2,3]);
+  var base=Math.floor(Math.random()*8), step=rand([1,2,3])*rand([1,-1]);   // travels either way
   var grid=[];
   for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
     var cont = two ? containers[(r+c)%3] : containers[0];
-    row.push({pos:{container:cont, idx:(base+step*(r+c))%8}});
+    row.push({pos:{container:cont, idx:((base+step*(r+c))%8+8)%8}});
   } grid.push(row); }
+  var way = step>0 ? 'clockwise' : 'anticlockwise';
   var expl = two
-    ? 'Two rules run at once. The dot advances a fixed number of positions clockwise with every step to the right and every step downward, and the container shape appears once in each row and column.'
-    : 'The dot advances a fixed number of positions clockwise around the figure with every step to the right and every step downward.';
+    ? 'Two rules run at once. The dot advances a fixed number of positions '+way+' with every step to the right and every step downward, and the container shape appears once in each row and column.'
+    : 'The dot advances a fixed number of positions '+way+' around the figure with every step to the right and every step downward.';
   return {grid:grid, answer:grid[2][2], type:'Position', isPos:true, step:step, two:two, explanation:expl};
 }
 /* Systematic wrong answers: stopping one step short, over-rotating by one step,

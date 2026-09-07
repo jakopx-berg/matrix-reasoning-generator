@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matrix Reasoning Practice</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#ffffff; --ink:#2b3138; --line:#cdd4da;
+    --accent:#16a3c4; --good:#2e9e5b; --bad:#d2483c; --muted:#7b848d;
+    --fill:#dfe6ec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px;}
+  h1{font-size:20px;margin:0 0 2px;}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px;}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin-bottom:14px;}
+  .row{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;}
+  .group{display:flex;gap:8px;align-items:center;font-size:13px;}
+  .group b{font-weight:600;}
+  label.opt{display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:13px;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:0;background:var(--card);padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink);}
+  .seg button.active{background:var(--accent);color:#fff;}
+  select,input[type=number]{border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:13px;background:#fff;color:var(--ink);}
+  .btn{border:0;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn.primary{background:var(--accent);color:#fff;}
+  .btn.ghost{background:#eef2f5;color:var(--ink);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  .statusbar{display:flex;justify-content:space-between;align-items:center;}
+  .score{font-size:13px;color:var(--muted);}
+  .score b{color:var(--ink);font-size:15px;}
+  .timer{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+  .ring{width:34px;height:34px;transform:rotate(-90deg);}
+  .ring .bg{fill:none;stroke:var(--line);stroke-width:3;}
+  .ring .fg{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;
+    transition:stroke-dashoffset .95s linear,stroke .3s;}
+
+  .matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;justify-items:center;
+    max-width:340px;margin:6px auto 4px;}
+  .cell{width:92px;height:92px;display:flex;align-items:center;justify-content:center;
+    color:#2b3138;}
+  .cell.q{border:2px solid var(--accent);border-radius:8px;color:var(--accent);
+    font-size:40px;font-weight:700;}
+  .divider{height:1px;background:var(--line);margin:14px 0;}
+
+  .opts{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+  @media(max-width:560px){.opts{grid-template-columns:repeat(3,1fr);}}
+  .optcard{border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;
+    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;color:#2b3138;
+    transition:border-color .15s,box-shadow .15s,background .15s;}
+  .optcard:hover{border-color:var(--accent);}
+  .optcard.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(22,163,196,.25);}
+  .optcard.correct{border-color:var(--good);background:#eaf7ef;box-shadow:0 0 0 2px rgba(46,158,91,.25);}
+  .optcard.wrong{border-color:var(--bad);background:#fbeceb;}
+  .optcard.locked{cursor:default;}
+
+  .feedback{margin-top:14px;font-size:14px;line-height:1.5;display:none;}
+  .feedback.show{display:block;}
+  .verdict{font-weight:700;}
+  .verdict.good{color:var(--good);}
+  .verdict.bad{color:var(--bad);}
+  .why{color:var(--ink);margin-top:4px;}
+  .tag{display:inline-block;font-size:11px;color:var(--muted);border:1px solid var(--line);
+    border-radius:20px;padding:2px 9px;margin-bottom:6px;}
+
+  .footer{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+  .hint{font-size:12px;color:var(--muted);}
+
+  .summary{text-align:center;padding:20px 10px;}
+  .summary .big{font-size:42px;font-weight:700;}
+  .summary .lbl{color:var(--muted);font-size:14px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Matrix Reasoning Practice</h1>
+  <p class="sub">3×3 abstract reasoning, in the style of pre-interview cognitive tests. Find the piece that completes the grid.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div class="group"><b>Mode</b>
+        <span class="seg" id="modeSeg">
+          <button data-mode="learn" class="active">Learning</button>
+          <button data-mode="exam">Exam sim</button>
+        </span>
+      </div>
+      <div class="group"><b>Puzzle types</b>
+        <label class="opt"><input type="checkbox" class="ptype" value="distribution" checked> Distribution</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="overlay" checked> Combination</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="shapeInner" checked> Shape + inner</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="quadLines" checked> Quadrilateral + lines</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
+        <label class="opt"><input type="checkbox" class="ptype" value="dots" checked> Dots</label>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="group" id="examLenGroup"><b>Exam length</b>
+        <select id="examLen">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select> questions
+      </div>
+      <div class="group" id="learnTimerGroup">
+        <label class="opt"><input type="checkbox" id="learnTimer"> Timer in learning mode</label>
+      </div>
+      <button class="btn primary" id="startBtn" style="margin-left:auto;">Start</button>
+    </div>
+  </div>
+
+  <div class="panel" id="playPanel" style="display:none;">
+    <div class="statusbar">
+      <div class="score" id="scoreBox">Question <b>1</b></div>
+      <div class="timer" id="timerBox" style="visibility:hidden;">
+        <svg class="ring" viewBox="0 0 36 36">
+          <circle class="bg" cx="18" cy="18" r="16"></circle>
+          <circle class="fg" id="ringFg" cx="18" cy="18" r="16"></circle>
+        </svg>
+        <span id="timerText">1:00</span>
+      </div>
+    </div>
+
+    <div class="matrix" id="matrix"></div>
+    <div class="divider"></div>
+    <div class="opts" id="opts"></div>
+
+    <div class="feedback" id="feedback">
+      <span class="tag" id="fbTag"></span>
+      <div class="verdict" id="fbVerdict"></div>
+      <div class="why" id="fbWhy"></div>
+    </div>
+
+    <div class="footer">
+      <span class="hint" id="hint"></span>
+      <button class="btn primary" id="nextBtn" disabled>Next task</button>
+    </div>
+  </div>
+
+  <div class="panel summary" id="summaryPanel" style="display:none;">
+    <div class="big" id="sumScore"></div>
+    <div class="lbl" id="sumLbl"></div>
+    <button class="btn primary" id="restartBtn">Try again</button>
+  </div>
+</div>
+
+<script>
+/* ---------- pure logic (testable without DOM) ---------- */
+var SHAPES = ['square','circle','triangle','diamond'];
+
+function rand(a){ return a[Math.floor(Math.random()*a.length)]; }
+function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
+
+function cellKey(c){
+  if(c.dots!==undefined) return 'D:'+c.dots;
+  if(c.rot) return 'R:'+c.rot.fig+':'+c.rot.angle;
+  if(c.arrowLines) return 'A:'+c.arrowLines.join(',');
+  if(c.quad) return 'Q:'+c.quad+'|'+(c.lines||[]).slice().sort().join(',');
+  return c.layers.map(function(l){return l.shape+':'+l.scale.toFixed(2)+':'+(l.fill?1:0);}).join('|');
+}
+
+/* Generator 1: Distribution — three outer shapes once per row/col, three inner shapes another way */
+function genDistribution(){
+  var outers = shuffle(SHAPES).slice(0,3);
+  var inners = shuffle(SHAPES).slice(0,3);
+  var single = Math.random()<0.4;   // sometimes just one rule, for variety
+  var grid=[];
+  for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
+    var o=outers[(r+c)%3], i=inners[(r+2*c)%3];
+    var layers = single ? [{shape:o,scale:1.0,fill:false}]
+                        : [{shape:o,scale:1.0,fill:false},{shape:i,scale:0.45,fill:false}];
+    row.push({layers:layers});
+  } grid.push(row); }
+  var expl = single
+    ? 'A single rule: three shapes each appear exactly once in every row and every column. The missing cell takes the shape that is absent from its row and column.'
+    : 'Three outer shapes each appear once in every row and every column; the three inner shapes follow their own once-per-row/column pattern. The missing cell takes the outer and inner shape absent from its row and column.';
+  return {grid:grid, answer:grid[2][2], type:'Distribution', explanation:expl};
+}
+
+/* Generator 2: Combination — third cell overlays the shapes of the first two */
+function genOverlay(){
+  var grid=[];
+  for(var r=0;r<3;r++){
+    var pair=shuffle(SHAPES).slice(0,2);
+    var a=pair[0], b=pair[1];
+    grid.push([
+      {layers:[{shape:a,scale:1.0,fill:false}]},
+      {layers:[{shape:b,scale:0.5,fill:false}]},
+      {layers:[{shape:a,scale:1.0,fill:false},{shape:b,scale:0.5,fill:false}]}
+    ]);
+  }
+  return {grid:grid, answer:grid[2][2], type:'Combination',
+    explanation:'In each row, the third cell is the first two cells combined: the big shape from cell 1 with the small shape from cell 2 placed inside it. The answer overlays the bottom-left and bottom-middle shapes.'};
+}
+
+/* Generator 3: Shape + inner — outer shape distributed; inner shape constant within a row and growing across it */
+function genShapeInner(){
+  var outers = shuffle(SHAPES).slice(0,3);
+  var inners = shuffle(SHAPES).slice(0,3);
+  var sizes=[0.3,0.52,0.74];
+  var grid=[];
+  for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
+    var o=outers[(r+c)%3], i=inners[r];   // inner shape stays the same across the row
+    row.push({layers:[{shape:o,scale:1.0,fill:false},{shape:i,scale:sizes[c],fill:false}]});
+  } grid.push(row); }
+  return {grid:grid, answer:grid[2][2], type:'Shape + inner',
+    explanation:'The outer shape follows a distribution (each appears once per row and column). Within each row the inner shape stays the same type but grows clearly larger from left to right, so the missing piece has the largest inner shape.'};
+}
+
+/* Generator 4: Quadrilateral + internal lines — like the tutorial's parallelogram example.
+   Each cell is the same leaning quad; the third figure overlays the lines of the first two. */
+var LINE_POOL=['d1','d2','mv','mh'];
+function genQuadLines(){
+  var quads=shuffle(['square','plRight','plLeft','rhombus']).slice(0,3); // one quad type per row
+  var grid=[];
+  for(var r=0;r<3;r++){
+    var q=quads[r];
+    var two=shuffle(LINE_POOL).slice(0,2);  // two distinct single lines
+    var A=[two[0]], B=[two[1]], C=[two[0],two[1]];
+    grid.push([{quad:q,lines:A},{quad:q,lines:B},{quad:q,lines:C}]);
+  }
+  return {grid:grid, answer:grid[2][2], type:'Combination (lines)', isLine:true,
+    explanation:'Every cell is the same quadrilateral marked with internal lines. In each row the third figure combines (overlays) the lines from the first two figures, so the answer contains both the bottom-left line and the bottom-middle line.'};
+}
+
+/* Generator 5: Arrows — number of arrows + their direction, in the style of the arrow-grid example. */
+var DIRS=['both','right','left'];
+function arrCell(cnt,dir){ var a=[]; for(var i=0;i<cnt;i++) a.push(dir); return {arrowLines:a}; }
+function genArrows(){
+  var mode=rand(['dirDist','countProg','both']);
+  var grid=[], expl='', r, c, row;
+  if(mode==='dirDist'){            // single rule: direction distributed, count fixed
+    var cnt=rand([2,3,3]), dirs=shuffle(DIRS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(cnt,dirs[(r+c)%3])); } grid.push(row); }
+    expl='Every cell has the same number of arrows. The direction — pointing both ways, right, or left — appears once in every row and column, so the answer takes the direction missing from its row and column.';
+  } else if(mode==='countProg'){   // single rule: count grows, direction fixed
+    var dir=rand(DIRS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(c+1,dir)); } grid.push(row); }
+    expl='Every arrow points the same way. The number of arrows grows from left to right across each row (one, two, three), so the answer has three arrows.';
+  } else {                         // two rules: count by row + direction distributed
+    var dirs2=shuffle(DIRS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(r+1,dirs2[(r+c)%3])); } grid.push(row); }
+    expl='Two rules combine: the number of arrows grows from the top row to the bottom (one, two, three), and the direction appears once in every row and column. The answer has three arrows pointing the direction missing from the bottom row.';
+  }
+  return {grid:grid, answer:grid[2][2], type:'Arrows', isArrow:true, explanation:expl};
+}
+
+function mixArr(n){
+  var a=[]; for(var i=0;i<n;i++) a.push(rand(DIRS));
+  if(a.every(function(x){return x===a[0];})) a[0]=(a[0]==='right'?'left':'right');
+  return a;
+}
+function makeArrowOptions(ans){
+  var n=ans.arrowLines.length, d=ans.arrowLines[0];
+  var opts=[{arrowLines:ans.arrowLines.slice()}], keys={};
+  keys[ans.arrowLines.join(',')]=true;
+  function add(lines){ var k=lines.join(','); if(!keys[k]){ keys[k]=true; opts.push({arrowLines:lines}); } }
+  var cand=[], dirsAll=['both','right','left','none'], i;
+  dirsAll.forEach(function(dd){ if(dd!==d){ var a=[]; for(i=0;i<n;i++)a.push(dd); cand.push(a); } });
+  [n-1,n+1,n+2].forEach(function(m){ if(m>=1&&m<=4){ var a=[]; for(i=0;i<m;i++)a.push(d); cand.push(a); } });
+  if(n>=2){ cand.push(mixArr(n)); cand.push(mixArr(n)); }
+  cand=shuffle(cand);
+  for(i=0;i<cand.length&&opts.length<6;i++) add(cand[i]);
+  var guard=0;
+  while(opts.length<6 && guard<300){ guard++; var m=1+Math.floor(Math.random()*3), a=[]; for(var j=0;j<m;j++)a.push(rand(dirsAll)); add(a); }
+  opts=shuffle(opts);
+  var ck=ans.arrowLines.join(','), idx=-1;
+  for(i=0;i<opts.length;i++){ if(opts[i].arrowLines.join(',')===ck){ idx=i; break; } }
+  return {opts:opts, correctIndex:idx};
+}
+
+/* Generator 6: Rotation — a pointer turns a constant amount each step. */
+var ANGLES=[0,45,90,135,180,225,270,315];
+function genRotation(){
+  var fig=rand(['hand','arrow']);
+  var base=rand(ANGLES), step=rand([45,90]);
+  var grid=[];
+  for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
+    row.push({rot:{fig:fig, angle:(base+step*(r+c))%360}});
+  } grid.push(row); }
+  return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true,
+    explanation:'The pointer turns by a constant amount clockwise with every step to the right and every step downward. Continue the rotation to fill the missing corner.'};
+}
+function makeAngleOptions(ans){
+  var fig=ans.rot.fig, a=ans.rot.angle;
+  var opts=[{rot:{fig:fig,angle:a}}], keys={}; keys[a]=true;
+  var pool=shuffle(ANGLES.slice()), i;
+  for(i=0;i<pool.length&&opts.length<6;i++){ if(!keys[pool[i]]){ keys[pool[i]]=true; opts.push({rot:{fig:fig,angle:pool[i]}}); } }
+  opts=shuffle(opts);
+  var idx=-1; for(i=0;i<opts.length;i++){ if(opts[i].rot.angle===a){ idx=i; break; } }
+  return {opts:opts, correctIndex:idx};
+}
+
+/* Generator 7: Dots — the number of dots follows a rule. */
+function genDots(){
+  var mode=rand(['dist','prog','add']);
+  var grid=[], expl='', r,c,row;
+  if(mode==='dist'){            // single rule: counts distributed
+    var vals=shuffle([1,2,3,4,5,6]).slice(0,3);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push({dots:vals[(r+c)%3]}); } grid.push(row); }
+    expl='Three dot-counts each appear once in every row and every column. The missing cell has the count absent from its row and column.';
+  } else if(mode==='prog'){     // single rule: count grows
+    var b=1+Math.floor(Math.random()*3);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push({dots:b+r+c}); } grid.push(row); }
+    expl='The number of dots increases by one with every step to the right and every step downward, so the missing cell continues the count.';
+  } else {                      // combination: third = first + second
+    for(r=0;r<3;r++){ var a=1+Math.floor(Math.random()*3), bb=1+Math.floor(Math.random()*3);
+      grid.push([{dots:a},{dots:bb},{dots:a+bb}]); }
+    expl='In each row, the number of dots in the third cell equals the dots in the first two cells added together.';
+  }
+  return {grid:grid, answer:grid[2][2], type:'Dots', isDot:true, explanation:expl};
+}
+function makeDotOptions(ans){
+  var n=ans.dots, opts=[{dots:n}], keys={}, i; keys[n]=true;
+  var cand=shuffle([n-2,n-1,n+1,n+2,n+3,n-3,n+4]).filter(function(x){return x>=1&&x<=9;});
+  for(i=0;i<cand.length&&opts.length<6;i++){ if(!keys[cand[i]]){ keys[cand[i]]=true; opts.push({dots:cand[i]}); } }
+  var x=1; while(opts.length<6 && x<=9){ if(!keys[x]){ keys[x]=true; opts.push({dots:x}); } x++; }
+  opts=shuffle(opts);
+  var idx=-1; for(i=0;i<opts.length;i++){ if(opts[i].dots===n){ idx=i; break; } }
+  return {opts:opts, correctIndex:idx};
+}
+
+var GENS={distribution:genDistribution, overlay:genOverlay, shapeInner:genShapeInner, quadLines:genQuadLines, arrows:genArrows, rotation:genRotation, dots:genDots};
+
+function makeLineOptions(ansLines, quad){
+  var ansKey=ansLines.slice().sort().join(',');
+  var opts=[{quad:quad,lines:ansLines.slice()}];
+  var keys={}; keys[ansKey]=true; var guard=0;
+  while(opts.length<6 && guard<600){ guard++;
+    var subset=LINE_POOL.filter(function(){return Math.random()<0.45;});
+    var key=subset.slice().sort().join(',');
+    if(!keys[key]){ keys[key]=true; opts.push({quad:quad,lines:subset}); }
+  }
+  opts=shuffle(opts);
+  var idx=-1; for(var i=0;i<opts.length;i++){ if((opts[i].lines||[]).slice().sort().join(',')===ansKey){ idx=i; break; } }
+  return {opts:opts, correctIndex:idx};
+}
+
+function mutate(cell){
+  var c=JSON.parse(JSON.stringify(cell));
+  if(c.layers.length===0) c.layers.push({shape:rand(SHAPES),scale:0.5,fill:false});
+  var li=Math.floor(Math.random()*c.layers.length);
+  var k=Math.floor(Math.random()*5);
+  if(k===0){ var ns; do{ns=rand(SHAPES);}while(ns===c.layers[li].shape); c.layers[li].shape=ns; }
+  else if(k===1){ c.layers[li].fill=!c.layers[li].fill; }
+  else if(k===2 && c.layers.length>1){ c.layers.pop(); }
+  else if(k===3){ c.layers.push({shape:rand(SHAPES),scale:0.32,fill:false}); }
+  else { c.layers[li].scale=Math.max(0.3,Math.min(1,c.layers[li].scale+(Math.random()<0.5?-0.22:0.22))); }
+  return c;
+}
+
+function makeOptions(answer){
+  var opts=[JSON.parse(JSON.stringify(answer))];
+  var keys={}; keys[cellKey(answer)]=true;
+  var guard=0;
+  while(opts.length<6 && guard<400){ guard++;
+    var m=mutate(answer); var key=cellKey(m);
+    if(!keys[key]){ keys[key]=true; opts.push(m); }
+  }
+  while(opts.length<6){
+    var f={layers:[{shape:rand(SHAPES),scale:1.0,fill:false},{shape:rand(SHAPES),scale:0.45,fill:false}]};
+    var fk=cellKey(f); if(!keys[fk]){ keys[fk]=true; opts.push(f); }
+  }
+  var ckey=cellKey(answer);
+  opts=shuffle(opts);
+  var idx=-1; for(var i=0;i<opts.length;i++){ if(cellKey(opts[i])===ckey){ idx=i; break; } }
+  return {opts:opts, correctIndex:idx};
+}
+
+var _typeBag=[], _lastType=null;
+function resetTypeBag(){ _typeBag=[]; _lastType=null; }
+function buildPuzzle(enabledTypes){
+  if(_typeBag.length===0){
+    _typeBag=shuffle(enabledTypes.slice());
+    // avoid repeating the previous type across bag boundaries
+    if(enabledTypes.length>1 && _typeBag[_typeBag.length-1]===_lastType){
+      _typeBag.unshift(_typeBag.pop());
+    }
+  }
+  var t=_typeBag.pop(); _lastType=t;
+  var p=GENS[t]();
+  var o=p.isLine ? makeLineOptions(p.answer.lines, p.answer.quad)
+        : p.isArrow ? makeArrowOptions(p.answer)
+        : p.isRot ? makeAngleOptions(p.answer)
+        : p.isDot ? makeDotOptions(p.answer)
+        : makeOptions(p.answer);
+  p.opts=o.opts; p.correctIndex=o.correctIndex;
+  return p;
+}
+
+/* ---------- rendering ---------- */
+function drawShape(shape,scale,fill){
+  var cx=50,cy=50, f=fill?'var(--fill)':'none', sw=2.2;
+  if(shape==='circle'){ var r=42*scale; return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+f+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  if(shape==='square'){ var s=38*scale; return '<rect x="'+(cx-s)+'" y="'+(cy-s)+'" width="'+(2*s)+'" height="'+(2*s)+'" fill="'+f+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  if(shape==='diamond'){ var d=46*scale; return '<polygon points="'+cx+','+(cy-d)+' '+(cx+d)+','+cy+' '+cx+','+(cy+d)+' '+(cx-d)+','+cy+'" fill="'+f+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  if(shape==='triangle'){ var h=42*scale, half=46*scale; return '<polygon points="'+cx+','+(cy-h)+' '+(cx+half)+','+(cy+h)+' '+(cx-half)+','+(cy+h)+'" fill="'+f+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  return '';
+}
+var QUADS={
+  square:[[18,18],[82,18],[82,82],[18,82]],
+  plRight:[[34,20],[88,20],[66,80],[12,80]],
+  plLeft:[[12,20],[66,20],[88,80],[34,80]],
+  rhombus:[[50,13],[87,50],[50,87],[13,50]]
+};
+function mid(a,b){ return [(a[0]+b[0])/2,(a[1]+b[1])/2]; }
+function renderQuad(cell){
+  var v=QUADS[cell.quad], TL=v[0],TR=v[1],BR=v[2],BL=v[3], sw=2.2;
+  var pts=v.map(function(p){return p[0]+','+p[1];}).join(' ');
+  var s='<polygon points="'+pts+'" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  function ln(a,b){ return '<line x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  var L=cell.lines||[];
+  if(L.indexOf('d1')>=0) s+=ln(TL,BR);
+  if(L.indexOf('d2')>=0) s+=ln(TR,BL);
+  if(L.indexOf('mh')>=0) s+=ln(mid(TL,BL),mid(TR,BR));
+  if(L.indexOf('mv')>=0) s+=ln(mid(TL,TR),mid(BL,BR));
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
+}
+function drawArrows(lines){
+  var n=lines.length, sw=2.2, gap=18, startY=50-(n-1)*gap/2, x1=20, x2=80, s='';
+  function head(x,y,dir){ var k=(dir==='right')?-1:1, dx=8*k, dy=5;
+    return '<line x1="'+x+'" y1="'+y+'" x2="'+(x+dx)+'" y2="'+(y-dy)+'" stroke="currentColor" stroke-width="'+sw+'"/>'+
+           '<line x1="'+x+'" y1="'+y+'" x2="'+(x+dx)+'" y2="'+(y+dy)+'" stroke="currentColor" stroke-width="'+sw+'"/>'; }
+  for(var i=0;i<n;i++){ var y=startY+i*gap, d=lines[i];
+    s+='<line x1="'+x1+'" y1="'+y+'" x2="'+x2+'" y2="'+y+'" stroke="currentColor" stroke-width="'+sw+'"/>';
+    if(d==='right'||d==='both') s+=head(x2,y,'right');
+    if(d==='left'||d==='both') s+=head(x1,y,'left');
+  }
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
+}
+function drawDots(n){
+  var cols=Math.ceil(Math.sqrt(n)), rows=Math.ceil(n/cols), sp=22, rr=6;
+  var y0=50-(rows-1)*sp/2, s='';
+  for(var ry=0;ry<rows;ry++){
+    var inRow=Math.min(cols, n-ry*cols), rx0=50-(inRow-1)*sp/2, yy=y0+ry*sp;
+    for(var cx=0;cx<inRow;cx++){ s+='<circle cx="'+(rx0+cx*sp)+'" cy="'+yy+'" r="'+rr+'" fill="currentColor"/>'; }
+  }
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
+}
+function drawRotation(cell){
+  var fig=cell.rot.fig, ang=cell.rot.angle, sw=2.2, inner;
+  if(fig==='hand'){
+    inner='<circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<line x1="50" y1="50" x2="50" y2="15" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<circle cx="50" cy="15" r="4.5" fill="currentColor"/>';
+  } else {
+    inner='<line x1="50" y1="84" x2="50" y2="18" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<line x1="50" y1="18" x2="41" y2="31" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<line x1="50" y1="18" x2="59" y2="31" stroke="currentColor" stroke-width="'+sw+'"/>';
+  }
+  return '<svg viewBox="0 0 100 100" width="78" height="78"><g transform="rotate('+ang+',50,50)">'+inner+'</g></svg>';
+}
+function renderCell(cell){
+  if(cell.dots!==undefined) return drawDots(cell.dots);
+  if(cell.rot) return drawRotation(cell);
+  if(cell.arrowLines) return drawArrows(cell.arrowLines);
+  if(cell.quad) return renderQuad(cell);
+  var inner=''; for(var i=0;i<cell.layers.length;i++){ var L=cell.layers[i]; inner+=drawShape(L.shape,L.scale,L.fill); }
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+inner+'</svg>';
+}
+
+/* ---------- app state & DOM (skip when no document) ---------- */
+function initApp(){
+  var state={ mode:'learn', enabled:['distribution','overlay','shapeInner','quadLines','arrows','rotation','dots'],
+    examLen:10, learnTimer:false, qNum:0, correct:0, answered:false,
+    puzzle:null, selected:-1, timer:null, timeLeft:60 };
+
+  var $=function(id){return document.getElementById(id);};
+  var matrix=$('matrix'), optsBox=$('opts'), feedback=$('feedback'),
+      nextBtn=$('nextBtn'), startBtn=$('startBtn'), scoreBox=$('scoreBox'),
+      timerBox=$('timerBox'), ringFg=$('ringFg'), timerText=$('timerText'),
+      hint=$('hint');
+
+  var CIRC=2*Math.PI*16;
+  ringFg.setAttribute('stroke-dasharray', CIRC);
+
+  // mode toggle
+  var segBtns=document.querySelectorAll('#modeSeg button');
+  segBtns.forEach(function(b){ b.addEventListener('click',function(){
+    segBtns.forEach(function(x){x.classList.remove('active');});
+    b.classList.add('active'); state.mode=b.dataset.mode;
+    $('examLenGroup').style.opacity = state.mode==='exam'?'1':'.5';
+    $('learnTimerGroup').style.opacity = state.mode==='learn'?'1':'.5';
+  });});
+  $('learnTimerGroup').style.opacity='1'; $('examLenGroup').style.opacity='.5';
+
+  function readEnabled(){
+    var arr=[]; document.querySelectorAll('.ptype').forEach(function(c){ if(c.checked) arr.push(c.value); });
+    return arr.length?arr:['distribution'];
+  }
+
+  function startTimerIfNeeded(){
+    var useTimer = state.mode==='exam' || (state.mode==='learn' && state.learnTimer);
+    if(!useTimer){ timerBox.style.visibility='hidden'; return; }
+    timerBox.style.visibility='visible';
+    state.timeLeft=60; updateRing();
+    state.timer=setInterval(function(){
+      state.timeLeft--; updateRing();
+      if(state.timeLeft<=0){ clearInterval(state.timer); onTimeUp(); }
+    },1000);
+  }
+  function stopTimer(){ if(state.timer){ clearInterval(state.timer); state.timer=null; } }
+  function updateRing(){
+    var frac=state.timeLeft/60;
+    ringFg.setAttribute('stroke-dashoffset', CIRC*(1-frac));
+    ringFg.setAttribute('stroke', state.timeLeft<=10?'var(--bad)':'var(--accent)');
+    var m=Math.floor(state.timeLeft/60), s=state.timeLeft%60;
+    timerText.textContent=m+':'+(s<10?'0'+s:s);
+  }
+  function onTimeUp(){
+    if(state.mode==='exam'){ // lock current answer (or none) and advance
+      if(!state.answered){ state.answered=true; if(state.selected===state.puzzle.correctIndex) {} }
+      advance();
+    } else { // learning: reveal
+      if(!state.answered) reveal(-1);
+    }
+  }
+
+  function loadPuzzle(){
+    state.answered=false; state.selected=-1;
+    state.puzzle=buildPuzzle(state.enabled);
+    feedback.classList.remove('show');
+    nextBtn.disabled=true;
+    hint.textContent = state.mode==='exam'
+      ? 'Exam mode: pick an answer, then Next (or wait for the timer). No going back.'
+      : 'Click the piece that completes the grid.';
+    scoreBox.innerHTML='Question <b>'+(state.qNum+1)+'</b>'+
+      (state.mode==='exam'?' / '+state.examLen:'')+
+      ' &nbsp;·&nbsp; Score <b>'+state.correct+'</b>';
+    // grid
+    var html='';
+    for(var r=0;r<3;r++){ for(var c=0;c<3;c++){
+      if(r===2&&c===2){ html+='<div class="cell q">?</div>'; }
+      else { html+='<div class="cell">'+renderCell(state.puzzle.grid[r][c])+'</div>'; }
+    }}
+    matrix.innerHTML=html;
+    // options
+    var oh='';
+    for(var i=0;i<state.puzzle.opts.length;i++){
+      oh+='<div class="optcard" data-i="'+i+'">'+renderCell(state.puzzle.opts[i])+'</div>';
+    }
+    optsBox.innerHTML=oh;
+    optsBox.querySelectorAll('.optcard').forEach(function(card){
+      card.addEventListener('click',function(){ onPick(parseInt(card.dataset.i,10)); });
+    });
+    startTimerIfNeeded();
+  }
+
+  function onPick(i){
+    if(state.answered && state.mode==='learn') return; // locked after reveal
+    if(state.mode==='exam'){
+      state.selected=i;
+      optsBox.querySelectorAll('.optcard').forEach(function(c){ c.classList.remove('sel'); });
+      optsBox.querySelector('[data-i="'+i+'"]').classList.add('sel');
+      nextBtn.disabled=false;
+    } else {
+      reveal(i);
+    }
+  }
+
+  function reveal(i){
+    state.answered=true; state.selected=i; stopTimer();
+    var ci=state.puzzle.correctIndex;
+    var cards=optsBox.querySelectorAll('.optcard');
+    cards.forEach(function(c){ c.classList.add('locked'); });
+    cards[ci].classList.add('correct');
+    var ok = (i===ci);
+    if(i>=0 && !ok) cards[i].classList.add('wrong');
+    if(ok) state.correct++;
+    $('fbTag').textContent=state.puzzle.type;
+    var v=$('fbVerdict');
+    if(i<0){ v.textContent='Time up — no answer'; v.className='verdict bad'; }
+    else if(ok){ v.textContent='Correct'; v.className='verdict good'; }
+    else { v.textContent='Not quite'; v.className='verdict bad'; }
+    $('fbWhy').textContent=state.puzzle.explanation;
+    feedback.classList.add('show');
+    scoreBox.innerHTML='Question <b>'+(state.qNum+1)+'</b> &nbsp;·&nbsp; Score <b>'+state.correct+'</b>';
+    nextBtn.disabled=false;
+    nextBtn.textContent='Next task';
+  }
+
+  function advance(){
+    stopTimer();
+    // tally exam answer
+    if(state.mode==='exam'){
+      if(state.selected===state.puzzle.correctIndex) state.correct++;
+    }
+    state.qNum++;
+    if(state.mode==='exam' && state.qNum>=state.examLen){ showSummary(); return; }
+    loadPuzzle();
+  }
+
+  nextBtn.addEventListener('click',advance);
+
+  function showSummary(){
+    stopTimer();
+    $('playPanel').style.display='none';
+    $('summaryPanel').style.display='block';
+    var pct=Math.round(100*state.correct/state.examLen);
+    $('sumScore').textContent=state.correct+' / '+state.examLen;
+    $('sumLbl').textContent=pct+'% correct';
+  }
+
+  function start(){
+    state.mode = document.querySelector('#modeSeg button.active').dataset.mode;
+    state.enabled=readEnabled();
+    state.examLen=parseInt($('examLen').value,10);
+    state.learnTimer=$('learnTimer').checked;
+    state.qNum=0; state.correct=0; resetTypeBag();
+    $('summaryPanel').style.display='none';
+    $('playPanel').style.display='block';
+    loadPuzzle();
+    $('playPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  startBtn.addEventListener('click',start);
+  $('restartBtn').addEventListener('click',function(){
+    $('summaryPanel').style.display='none'; start();
+  });
+}
+
+if(typeof document!=='undefined' && document.getElementById){ initApp(); }
+</script>
+</body>
+</html>

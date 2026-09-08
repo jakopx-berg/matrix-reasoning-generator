@@ -100,13 +100,20 @@
         <label class="opt" title="The third cell overlays the shapes of the first two."><input type="checkbox" class="ptype" value="overlay" checked> Combination</label>
         <label class="opt" title="Outer shape distributed, inner shape growing across each row."><input type="checkbox" class="ptype" value="shapeInner" checked> Shape + inner</label>
         <label class="opt" title="Internal lines combined by union (OR), exclusive-or (XOR), intersection (AND) or subtraction."><input type="checkbox" class="ptype" value="quadLines" checked> Lines (logic)</label>
-        <label class="opt" title="The number of arrows, the direction they point, or both at once."><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
-        <label class="opt" title="A pointer turning a fixed step each move, clockwise or anticlockwise."><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
+        <label class="opt" title="How many arrows, the angle the bundle sits at, and where the heads are. Counts can also add. Up to three rules at once."><input type="checkbox" class="ptype" value="arrows" checked> Arrows</label>
+        <label class="opt" title="A pointer turning a fixed step each move, clockwise or anticlockwise. Sometimes with the surrounding shape distributing as a second rule."><input type="checkbox" class="ptype" value="rotation" checked> Rotation</label>
         <label class="opt" title="Counts by distribution, progression, addition or subtraction."><input type="checkbox" class="ptype" value="dots" checked> Dots</label>
-        <label class="opt" title="An element moving a fixed number of steps around the figure, clockwise or anticlockwise."><input type="checkbox" class="ptype" value="position" checked> Position</label>
+        <label class="opt" title="One or two markers travelling around the figure at their own rate and direction. Two markers means tracking both at once."><input type="checkbox" class="ptype" value="position" checked> Position</label>
       </div>
     </div>
     <div class="row" style="margin-top:12px;">
+      <div class="group" title="Controls how many rules stack in each puzzle and which operators appear, not just the timer."><b>Difficulty</b>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="standard" selected>Standard</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
       <div class="group" id="examLenGroup"><b>Exam length</b>
         <select id="examLen">
           <option value="5">5</option>
@@ -163,14 +170,19 @@
 /* ---------- pure logic (testable without DOM) ---------- */
 var SHAPES = ['square','circle','triangle','diamond'];
 
+/* Difficulty. Generators call lv() to pick how many rules stack and which
+   operators appear, so turning this up changes the puzzles rather than just the timer. */
+var LEVEL = 'standard';
+function lv(easy, std, hard){ return LEVEL==='easy' ? easy : LEVEL==='hard' ? hard : std; }
+
 function rand(a){ return a[Math.floor(Math.random()*a.length)]; }
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
 
 function cellKey(c){
-  if(c.pos) return 'P:'+c.pos.container+':'+c.pos.idx;
+  if(c.pos) return 'P:'+c.pos.container+':'+c.pos.idx+':'+(c.pos.idx2===undefined?'-':c.pos.idx2);
   if(c.dots!==undefined) return 'D:'+c.dots;
-  if(c.rot) return 'R:'+c.rot.fig+':'+c.rot.angle;
-  if(c.arrowLines) return 'A:'+c.arrowLines.join(',');
+  if(c.rot) return 'R:'+c.rot.fig+':'+c.rot.angle+':'+(c.rot.frame||'-');
+  if(c.arrowLines) return 'A:'+(c.orient||0)+':'+c.arrowLines.join(',');
   if(c.quad) return 'Q:'+c.quad+'|'+(c.lines||[]).slice().sort().join(',');
   return c.layers.map(function(l){return l.shape+':'+l.scale.toFixed(2)+':'+(l.fill?1:0);}).join('|');
 }
@@ -179,7 +191,7 @@ function cellKey(c){
 function genDistribution(){
   var outers = shuffle(SHAPES).slice(0,3);
   var inners = shuffle(SHAPES).slice(0,3);
-  var single = Math.random()<0.4;   // sometimes just one rule, for variety
+  var single = Math.random() < lv(0.9,0.4,0.08);   // how often it drops to one rule
   var grid=[];
   for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
     var o=outers[(r+c)%3], i=inners[(r+2*c)%3];
@@ -245,7 +257,9 @@ var LINE_EXPL={
   sub:'In each row, the lines of the second figure are removed from the first.'
 };
 function genQuadLines(){
-  var op=rand(['or','or','xor','and','sub']);
+  var op=rand(lv(['or','or','or','xor'],
+                 ['or','or','xor','and','sub'],
+                 ['xor','xor','and','and','sub','sub','or']));
   var quads=shuffle(['square','plRight','plLeft','rhombus']).slice(0,3); // one quad type per row
   var grid=[];
   for(var r=0;r<3;r++){
@@ -267,24 +281,40 @@ function genQuadLines(){
 
 /* Generator 5: Arrows — number of arrows + their direction, in the style of the arrow-grid example. */
 var DIRS=['both','right','left'];
-function arrCell(cnt,dir){ var a=[]; for(var i=0;i<cnt;i++) a.push(dir); return {arrowLines:a}; }
+var ORIENTS=[0,45,90,135];
+function arrCell(cnt,dir,orient){ var a=[]; for(var i=0;i<cnt;i++) a.push(dir); return {arrowLines:a, orient:orient||0}; }
 function genArrows(){
-  var mode=rand(['dirDist','countProg','both']);
-  var grid=[], expl='', r, c, row;
-  if(mode==='dirDist'){            // single rule: direction distributed, count fixed
-    var cnt=rand([2,3,3]), dirs=shuffle(DIRS);
-    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(cnt,dirs[(r+c)%3])); } grid.push(row); }
-    expl='Every cell has the same number of arrows. The direction (pointing both ways, right, or left) appears once in every row and column, so the answer takes the direction missing from its row and column.';
-  } else if(mode==='countProg'){   // single rule: count grows, direction fixed
-    var dir=rand(DIRS);
-    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(c+1,dir)); } grid.push(row); }
-    expl='Every arrow points the same way. The number of arrows grows from left to right across each row (one, two, three), so the answer has three arrows.';
-  } else {                         // two rules: count by row + direction distributed
-    var dirs2=shuffle(DIRS);
-    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(r+1,dirs2[(r+c)%3])); } grid.push(row); }
-    expl='Two rules combine: the number of arrows grows from the top row to the bottom (one, two, three), and the direction appears once in every row and column. The answer has three arrows pointing the direction missing from the bottom row.';
+  var mode=rand(lv(['dirDist','countProg','orientDist'],
+                   ['dirDist','countProg','both','orientDist','countAdd'],
+                   ['both','countAdd','triple','triple','orientDist']));
+  var grid=[], expl='', r, c, row, dirs, os, cnt, dir, o0;
+  if(mode==='dirDist'){            // one rule: where the heads sit
+    cnt=rand([2,3,3]); dirs=shuffle(DIRS); o0=rand(ORIENTS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(cnt,dirs[(r+c)%3],o0)); } grid.push(row); }
+    expl='Every cell holds the same number of arrows at the same angle. What changes is where the heads sit (both ends, one end, or the other end), and each of the three appears once in every row and column.';
+  } else if(mode==='countProg'){   // one rule: how many
+    dir=rand(DIRS); o0=rand(ORIENTS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(c+1,dir,o0)); } grid.push(row); }
+    expl='Every arrow is identical. The number of arrows grows from left to right across each row (one, two, three), so the answer has three.';
+  } else if(mode==='orientDist'){  // one rule: the angle the bundle sits at
+    cnt=rand([2,3]); dir=rand(DIRS); os=shuffle(ORIENTS).slice(0,3);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(cnt,dir,os[(r+c)%3])); } grid.push(row); }
+    expl='The number of arrows and their heads never change. What changes is the angle the whole bundle sits at, and each of the three angles appears once in every row and column.';
+  } else if(mode==='countAdd'){    // arithmetic on the count
+    dir=rand(DIRS); o0=rand(ORIENTS);
+    for(r=0;r<3;r++){ var a=1+Math.floor(Math.random()*2), b=1+Math.floor(Math.random()*2);
+      grid.push([arrCell(a,dir,o0),arrCell(b,dir,o0),arrCell(a+b,dir,o0)]); }
+    expl='In each row the third cell holds as many arrows as the first two cells put together.';
+  } else if(mode==='triple'){      // three rules at once
+    dirs=shuffle(DIRS); os=shuffle(ORIENTS).slice(0,3);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(r+1,dirs[(r+c)%3],os[(r+2*c)%3])); } grid.push(row); }
+    expl='Three rules run at once. The number of arrows grows from the top row to the bottom, the position of the heads appears once in every row and column, and the angle follows its own separate once-per-row-and-column pattern. Take one rule at a time.';
+  } else {                         // two rules: count by row + heads distributed
+    dirs=shuffle(DIRS); o0=rand(ORIENTS);
+    for(r=0;r<3;r++){ row=[]; for(c=0;c<3;c++){ row.push(arrCell(r+1,dirs[(r+c)%3],o0)); } grid.push(row); }
+    expl='Two rules combine: the number of arrows grows from the top row to the bottom (one, two, three), and the position of the heads appears once in every row and column.';
   }
-  return {grid:grid, answer:grid[2][2], type:'Arrows', isArrow:true, explanation:expl};
+  return {grid:grid, answer:grid[2][2], type:'Arrows', isArrow:true, mode:mode, explanation:expl};
 }
 
 function mixArr(n){
@@ -295,14 +325,15 @@ function mixArr(n){
 /* Systematic wrong answers: right count with the wrong direction, right direction with
    the wrong count, and a mixed-direction set that never occurs in a real grid. */
 function arrowVariants(p){
-  var ans=p.answer, n=ans.arrowLines.length, d=ans.arrowLines[0], out=[], i;
+  var ans=p.answer, n=ans.arrowLines.length, d=ans.arrowLines[0], o=ans.orient||0, out=[], i;
   ['both','right','left','none'].forEach(function(dd){
-    if(dd!==d){ var a=[]; for(i=0;i<n;i++)a.push(dd); out.push({arrowLines:a}); }
+    if(dd!==d){ var a=[]; for(i=0;i<n;i++)a.push(dd); out.push({arrowLines:a,orient:o}); }
   });
   [n-1,n+1,n+2].forEach(function(m){
-    if(m>=1&&m<=4){ var a=[]; for(i=0;i<m;i++)a.push(d); out.push({arrowLines:a}); }
+    if(m>=1&&m<=4){ var a=[]; for(i=0;i<m;i++)a.push(d); out.push({arrowLines:a,orient:o}); }
   });
-  if(n>=2){ out.push({arrowLines:mixArr(n)}); out.push({arrowLines:mixArr(n)}); }
+  ORIENTS.forEach(function(oo){ if(oo!==o) out.push({arrowLines:ans.arrowLines.slice(),orient:oo}); });
+  if(n>=2){ out.push({arrowLines:mixArr(n),orient:o}); }
   return out;
 }
 
@@ -310,14 +341,22 @@ function arrowVariants(p){
 var ANGLES=[0,45,90,135,180,225,270,315];
 function genRotation(){
   var fig=rand(['hand','arrow']);
+  /* Step size is deliberately NOT tied to difficulty. A finer step is only harder to
+     see, not harder to reason about. Rotation scales by adding a SECOND RULE instead:
+     the surrounding shape distributes while the pointer turns. */
+  var mode=rand(lv(['single'],['single','single','two'],['two','two','single']));
+  var frames=shuffle(['circle','square','diamond']);
   var base=rand(ANGLES), step=rand([45,90])*rand([1,-1]);   // turns either way
   var grid=[];
   for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
-    row.push({rot:{fig:fig, angle:((base+step*(r+c))%360+360)%360}});
+    var fr = mode==='two' ? frames[(r+c)%3] : (fig==='hand' ? 'circle' : null);
+    row.push({rot:{fig:fig, angle:((base+step*(r+c))%360+360)%360, frame:fr}});
   } grid.push(row); }
   var way = step>0 ? 'clockwise' : 'anticlockwise';
-  return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true, step:step,
-    explanation:'The pointer turns by a constant amount '+way+' with every step to the right and every step downward. Continue the rotation to fill the missing corner.'};
+  var expl = mode==='two'
+    ? 'Two rules run at once. The pointer turns a constant amount '+way+' with every step to the right and every step downward, and the surrounding shape appears once in every row and column.'
+    : 'The pointer turns by a constant amount '+way+' with every step to the right and every step downward. Continue the rotation to fill the missing corner.';
+  return {grid:grid, answer:grid[2][2], type:'Rotation', isRot:true, step:step, mode:mode, explanation:expl};
 }
 
 /* Generator 8: Position — an element moves around the figure a fixed number of steps. */
@@ -326,33 +365,54 @@ function posPoint(idx){
   return [50+R*Math.cos(ang), 50+R*Math.sin(ang)];
 }
 function genPosition(){
-  var two=Math.random()<0.45;
+  var mode=rand(lv(['single','single','container'],
+                   ['single','container','two','two'],
+                   ['two','two','two','container']));
   var containers=shuffle(['square','circle','diamond']).slice(0,3);
-  var base=Math.floor(Math.random()*8), step=rand([1,2,3])*rand([1,-1]);   // travels either way
-  var grid=[];
-  for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
-    var cont = two ? containers[(r+c)%3] : containers[0];
-    row.push({pos:{container:cont, idx:((base+step*(r+c))%8+8)%8}});
-  } grid.push(row); }
+  var base, step, base2, step2, grid, guard=0, clash;
+  do{
+    guard++; clash=false; grid=[];
+    base=Math.floor(Math.random()*8); step=rand([1,2,3])*rand([1,-1]);   // travels either way
+    base2=Math.floor(Math.random()*8); step2=rand([1,2,3])*rand([1,-1]);
+    for(var r=0;r<3;r++){ var row=[]; for(var c=0;c<3;c++){
+      var cont = mode==='container' ? containers[(r+c)%3] : containers[0];
+      var cell={container:cont, idx:((base+step*(r+c))%8+8)%8};
+      if(mode==='two'){
+        cell.idx2=((base2+step2*(r+c))%8+8)%8;
+        if(cell.idx2===cell.idx) clash=true;   // the two markers must stay apart
+      }
+      row.push({pos:cell});
+    } grid.push(row); }
+    if(mode==='two' && step2===step) clash=true; // otherwise they move as one
+  } while(clash && guard<200);
   var way = step>0 ? 'clockwise' : 'anticlockwise';
-  var expl = two
+  var way2 = step2>0 ? 'clockwise' : 'anticlockwise';
+  var expl = mode==='two'
+    ? 'Two markers travel independently. The filled dot moves '+way+' and the open dot moves '+way2+', each by its own fixed number of positions per step. Track one, then the other.'
+    : mode==='container'
     ? 'Two rules run at once. The dot advances a fixed number of positions '+way+' with every step to the right and every step downward, and the container shape appears once in each row and column.'
     : 'The dot advances a fixed number of positions '+way+' around the figure with every step to the right and every step downward.';
-  return {grid:grid, answer:grid[2][2], type:'Position', isPos:true, step:step, two:two, explanation:expl};
+  return {grid:grid, answer:grid[2][2], type:'Position', isPos:true, step:step, step2:step2, mode:mode, explanation:expl};
 }
 /* Systematic wrong answers: stopping one step short, over-rotating by one step,
    and the exact opposite. These are the mistakes you actually make under time. */
 function rotVariants(p){
-  var a=p.answer, fig=a.rot.fig, ang=a.rot.angle, st=p.step||45, out=[];
-  [-1,1,-2,2].forEach(function(m){ out.push({rot:{fig:fig, angle:((ang+m*st)%360+360)%360}}); });
-  out.push({rot:{fig:fig, angle:(ang+180)%360}});
-  ANGLES.forEach(function(g){ out.push({rot:{fig:fig, angle:g}}); });
+  var a=p.answer, fig=a.rot.fig, ang=a.rot.angle, fr=a.rot.frame, st=p.step||45, out=[];
+  function mk(an,f){ return {rot:{fig:fig, angle:((an%360)+360)%360, frame:(f===undefined?fr:f)}}; }
+  [-1,1,-2,2].forEach(function(m){ out.push(mk(ang+m*st)); });   // one step short / too far
+  out.push(mk(ang+180));
+  if(p.mode==='two'){                                            // right angle, wrong frame
+    ['circle','square','diamond'].forEach(function(f){ if(f!==fr) out.push(mk(ang,f)); });
+  }
+  ANGLES.forEach(function(g){ out.push(mk(g)); });
   return out;
 }
 
 /* Generator 7: Dots — the number of dots follows a rule. */
 function genDots(){
-  var mode=rand(['dist','prog','add','sub']);
+  var mode=rand(lv(['dist','dist','prog'],
+                   ['dist','prog','add','sub'],
+                   ['add','sub','sub','add','prog']));
   var grid=[], expl='', r,c,row;
   if(mode==='dist'){            // single rule: counts distributed
     var vals=shuffle([1,2,3,4,5,6]).slice(0,3);
@@ -414,11 +474,20 @@ function layerVariants(p){
 
 /* Systematic wrong answers: one position short, one too far, and the opposite side. */
 function posVariants(p){
-  var a=p.answer, cont=a.pos.container, i=a.pos.idx, st=p.step, out=[];
-  [-1,1,-2,2].forEach(function(m){ out.push({pos:{container:cont, idx:((i+m*st)%8+8)%8}}); });
-  out.push({pos:{container:cont, idx:(i+4)%8}});
-  for(var k=0;k<8;k++) out.push({pos:{container:cont, idx:k}});
-  if(p.two){ ['square','circle','diamond'].forEach(function(cc){ if(cc!==cont) out.push({pos:{container:cc, idx:i}}); }); }
+  var a=p.answer, cont=a.pos.container, i=a.pos.idx, j=a.pos.idx2, st=p.step, st2=p.step2, out=[];
+  function mk(ii,jj,cc){
+    var o={container:cc||cont, idx:((ii%8)+8)%8};
+    if(j!==undefined) o.idx2=((jj%8)+8)%8;
+    return {pos:o};
+  }
+  [-1,1,-2,2].forEach(function(m){ out.push(mk(i+m*st, j, cont)); });          // filled dot off by a step
+  if(j!==undefined){
+    [-1,1,-2].forEach(function(m){ out.push(mk(i, j+m*st2, cont)); });         // open dot off by a step
+    out.push(mk(j, i, cont));                                                  // the two swapped
+  }
+  out.push(mk(i+4, j===undefined?0:j+4, cont));
+  for(var k=0;k<8;k++) out.push(mk(k, j, cont));
+  if(p.mode==='container'){ ['square','circle','diamond'].forEach(function(cc){ if(cc!==cont) out.push(mk(i,j,cc)); }); }
   return out;
 }
 
@@ -460,16 +529,18 @@ function buildOptions(p){
     fb=function(){ return {quad:a.quad, lines:LINE_POOL.filter(function(){return Math.random()<0.45;})}; };
   } else if(p.isArrow){
     cand=mixCandidates(arrowVariants(p), nb);
-    fb=function(){ var m=1+Math.floor(Math.random()*3), arr=[]; for(var j=0;j<m;j++)arr.push(rand(['both','right','left','none'])); return {arrowLines:arr}; };
+    fb=function(){ var m=1+Math.floor(Math.random()*3), arr=[]; for(var j=0;j<m;j++)arr.push(rand(['both','right','left','none'])); return {arrowLines:arr, orient:rand(ORIENTS)}; };
   } else if(p.isRot){
     cand=mixCandidates(rotVariants(p), nb);
-    fb=function(){ return {rot:{fig:a.rot.fig, angle:rand(ANGLES)}}; };
+    fb=function(){ return {rot:{fig:a.rot.fig, angle:rand(ANGLES), frame:a.rot.frame}}; };
   } else if(p.isDot){
     cand=mixCandidates(dotVariants(p), nb);
     fb=function(){ return {dots:1+Math.floor(Math.random()*9)}; };
   } else if(p.isPos){
     cand=mixCandidates(posVariants(p), nb);
-    fb=function(){ return {pos:{container:a.pos.container, idx:Math.floor(Math.random()*8)}}; };
+    fb=function(){ var o={container:a.pos.container, idx:Math.floor(Math.random()*8)};
+                   if(a.pos.idx2!==undefined) o.idx2=Math.floor(Math.random()*8);
+                   return {pos:o}; };
   } else {
     cand=mixCandidates(layerVariants(p), nb);
     fb=function(){ return mutate(a); };
@@ -537,7 +608,7 @@ function renderQuad(cell){
   if(L.indexOf('mv')>=0) s+=ln(mid(TL,TR),mid(BL,BR));
   return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
 }
-function drawArrows(lines){
+function drawArrows(lines,orient){
   var n=lines.length, sw=2.2, gap=18, startY=50-(n-1)*gap/2, x1=20, x2=80, s='';
   function head(x,y,dir){ var k=(dir==='right')?-1:1, dx=8*k, dy=5;
     return '<line x1="'+x+'" y1="'+y+'" x2="'+(x+dx)+'" y2="'+(y-dy)+'" stroke="currentColor" stroke-width="'+sw+'"/>'+
@@ -547,7 +618,7 @@ function drawArrows(lines){
     if(d==='right'||d==='both') s+=head(x2,y,'right');
     if(d==='left'||d==='both') s+=head(x1,y,'left');
   }
-  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
+  return '<svg viewBox="0 0 100 100" width="78" height="78"><g transform="rotate('+(orient||0)+',50,50)">'+s+'</g></svg>';
 }
 function drawDots(n){
   var cols=Math.ceil(Math.sqrt(n)), rows=Math.ceil(n/cols), sp=22, rr=6;
@@ -559,17 +630,21 @@ function drawDots(n){
   return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
 }
 function drawRotation(cell){
-  var fig=cell.rot.fig, ang=cell.rot.angle, sw=2.2, inner;
+  var fig=cell.rot.fig, ang=cell.rot.angle, fr=cell.rot.frame, sw=2.2, s='', inner;
+  /* The frame stays put; only the pointer turns. Two independent things to read. */
+  if(fr==='circle') s='<circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  else if(fr==='square') s='<rect x="13" y="13" width="74" height="74" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  else if(fr==='diamond') s='<polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  var R = fr ? 27 : 34;   // kept inside the frame at every angle, including the diamond
   if(fig==='hand'){
-    inner='<circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>'+
-          '<line x1="50" y1="50" x2="50" y2="15" stroke="currentColor" stroke-width="'+sw+'"/>'+
-          '<circle cx="50" cy="15" r="4.5" fill="currentColor"/>';
+    inner='<line x1="50" y1="50" x2="50" y2="'+(50-R)+'" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<circle cx="50" cy="'+(50-R)+'" r="4.5" fill="currentColor"/>';
   } else {
-    inner='<line x1="50" y1="84" x2="50" y2="18" stroke="currentColor" stroke-width="'+sw+'"/>'+
-          '<line x1="50" y1="18" x2="41" y2="31" stroke="currentColor" stroke-width="'+sw+'"/>'+
-          '<line x1="50" y1="18" x2="59" y2="31" stroke="currentColor" stroke-width="'+sw+'"/>';
+    inner='<line x1="50" y1="'+(50+R)+'" x2="50" y2="'+(50-R)+'" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<line x1="50" y1="'+(50-R)+'" x2="41" y2="'+(50-R+11)+'" stroke="currentColor" stroke-width="'+sw+'"/>'+
+          '<line x1="50" y1="'+(50-R)+'" x2="59" y2="'+(50-R+11)+'" stroke="currentColor" stroke-width="'+sw+'"/>';
   }
-  return '<svg viewBox="0 0 100 100" width="78" height="78"><g transform="rotate('+ang+',50,50)">'+inner+'</g></svg>';
+  return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'<g transform="rotate('+ang+',50,50)">'+inner+'</g></svg>';
 }
 function drawPosition(cell){
   var sw=2.2, cont=cell.pos.container, s='';
@@ -578,13 +653,17 @@ function drawPosition(cell){
   else s='<polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
   var pt=posPoint(cell.pos.idx);
   s+='<circle cx="'+pt[0].toFixed(1)+'" cy="'+pt[1].toFixed(1)+'" r="6.5" fill="currentColor"/>';
+  if(cell.pos.idx2!==undefined){
+    var p2=posPoint(cell.pos.idx2);
+    s+='<circle cx="'+p2[0].toFixed(1)+'" cy="'+p2[1].toFixed(1)+'" r="6" fill="none" stroke="currentColor" stroke-width="'+sw+'"/>';
+  }
   return '<svg viewBox="0 0 100 100" width="78" height="78">'+s+'</svg>';
 }
 function renderCell(cell){
   if(cell.pos) return drawPosition(cell);
   if(cell.dots!==undefined) return drawDots(cell.dots);
   if(cell.rot) return drawRotation(cell);
-  if(cell.arrowLines) return drawArrows(cell.arrowLines);
+  if(cell.arrowLines) return drawArrows(cell.arrowLines, cell.orient);
   if(cell.quad) return renderQuad(cell);
   var inner=''; for(var i=0;i<cell.layers.length;i++){ var L=cell.layers[i]; inner+=drawShape(L.shape,L.scale,L.fill); }
   return '<svg viewBox="0 0 100 100" width="78" height="78">'+inner+'</svg>';
@@ -741,6 +820,7 @@ function initApp(){
     state.mode = document.querySelector('#modeSeg button.active').dataset.mode;
     state.enabled=readEnabled();
     state.examLen=parseInt($('examLen').value,10);
+    LEVEL=$('difficulty').value;
     state.learnTimer=$('learnTimer').checked;
     state.qNum=0; state.correct=0; resetTypeBag();
     $('summaryPanel').style.display='none';
